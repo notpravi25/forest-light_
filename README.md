@@ -23,10 +23,11 @@ You reveal your surroundings by clicking to emit sound waves.
 Silence is safety. Sound is risk.
 
 ---
-## 📸 Gameplay Preview
+## 📸 Screenshots
 
-![Gameplay Screenshot](screenshots/gameplay.png)
+![Gameplay 1](ss1.png)
 
+![Gameplay 2](ss2.png)
 ## 🕹 Controls
 
 | Action          | Control                           |
