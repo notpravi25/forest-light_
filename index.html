@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ECHO WALKER</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--g:#4dffaa;--r:#ff4a4a;--y:#ffcc44;--dim:#5a8a6a;--pale:#c8ddc0}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Georgia,serif;color:var(--pale);user-select:none}
+#gameCanvas{display:block;position:fixed;top:60px;left:0;width:100%;height:calc(100% - 60px);cursor:crosshair}
+#hud{position:fixed;top:0;left:0;width:100%;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:rgba(5,10,7,0.97);border-bottom:1px solid rgba(77,255,170,0.15);z-index:100}
+#hud-left,#hud-right{display:flex;align-items:center;gap:20px}
+#level-display{font-size:13px;letter-spacing:3px;color:var(--g);text-shadow:0 0 10px rgba(77,255,170,0.6)}
+.lbl{font-size:9px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:2px}
+#mission-panel{display:flex;flex-direction:column}
+#mission-text{font-size:14px;font-style:italic;max-width:320px}
+#mission-text.done{color:var(--g)}
+#timer-display,#relic-display{display:flex;flex-direction:column;align-items:center}
+#timer-value{font-size:26px;font-weight:bold;color:var(--g);min-width:46px;text-align:center}
+#timer-value.low{color:var(--y)}
+#timer-value.pulse{color:var(--r);animation:blink .45s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#relic-value{font-size:17px;font-weight:bold;color:var(--y)}
+#pu-box{padding:4px 12px;border:1px solid rgba(77,255,170,.3);border-radius:20px;color:var(--g);font-size:12px;background:rgba(77,255,170,.06)}
+
+.screen{display:none;position:fixed;inset:0;background:rgba(2,6,3,0.95);align-items:center;justify-content:center;z-index:200}
+.screen.active{display:flex}
+.box{max-width:480px;width:88%;padding:44px 40px;background:rgba(10,20,13,0.98);border:1px solid rgba(77,255,170,.2);border-radius:4px;text-align:center}
+.box.red{border-color:rgba(255,74,74,.35)}
+.box.gold{border-color:rgba(255,204,68,.4)}
+.box h1{font-size:27px;letter-spacing:2px;color:var(--g);margin-bottom:8px}
+.box.red h1{color:var(--r)}
+.box.gold h1{color:var(--y)}
+.box h2{font-size:15px;font-style:italic;color:var(--dim);font-weight:normal;margin-bottom:20px}
+.box p{font-size:14px;line-height:1.8;color:var(--pale);margin-bottom:24px}
+.box p strong{color:var(--g)}.box p em{color:var(--r)}
+.cg{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;text-align:left;padding:14px 18px;margin-bottom:30px;background:rgba(77,255,170,.03);border:1px solid rgba(77,255,170,.08);border-radius:3px;font-size:13px}
+.cg .k{color:var(--g);font-weight:bold}.cg .v{color:var(--dim)}
+.btn{padding:13px 40px;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:4px;text-transform:uppercase;background:var(--g);color:#050c07;border:none;border-radius:2px;cursor:pointer;transition:all .2s}
+.btn:hover{background:#7affcc;transform:translateY(-2px)}
+.box.red .btn{background:var(--r);color:#fff}.box.red .btn:hover{background:#ff7070}
+.box.gold .btn{background:var(--y);color:#050c07}.box.gold .btn:hover{background:#ffd966}
+
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);padding:8px 24px;border-radius:24px;font-size:13px;background:rgba(10,20,13,.95);border:1px solid rgba(77,255,170,.35);color:var(--g);z-index:300;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
+#toast.show{opacity:1}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:150;opacity:0;background:rgba(255,40,40,.32);transition:opacity .12s}
+#flash.show{opacity:1}
+
+#miniMap{
+  position:fixed;
+  right:14px;
+  bottom:14px;
+  width:160px;
+  height:120px;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(77,255,170,0.25);
+  border-radius:6px;
+  z-index:120;
+}
+
+/* ❤️ lives */
+#lives-value{
+  font-size:18px;
+  letter-spacing:3px;
+  transition:transform .18s ease, opacity .18s ease;
+}
+#lives-value.hit{
+  transform:scale(1.4);
+  opacity:0.6;
+}
+
+/* 🔋 power bars */
+#power-bars{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+.power-bar{
+  width:60px;
+  height:6px;
+  background:rgba(255,255,255,0.15);
+  border-radius:4px;
+  overflow:hidden;
+  position:relative;
+}
+.power-fill{
+  height:100%;
+  width:100%;
+  background:#4dffaa;
+  transition:width 0.1s linear;
+}
+.power-bar.silent .power-fill{ background:#55ffaa; }
+.power-bar.lantern .power-fill{ background:#ffcc44; }
+.power-bar.shield .power-fill{ background:#66aaff; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="hud-left">
+    <div id="level-display">LEVEL <span id="level-num">1</span></div>
+    <div id="mission-panel">
+      <div class="lbl">MISSION</div>
+      <div id="mission-text">Find all relics and reach the exit</div>
+    </div>
+  </div>
+  <div id="hud-right">
+    <div id="timer-display"><div class="lbl">TIME</div><div id="timer-value">60</div></div>
+    <div id="relic-display"><div class="lbl">RELICS</div><div id="relic-value">0 / 3</div></div>
+    <div id="lives-display">
+  <div class="lbl">LIVES</div>
+  <div id="lives-value">❤❤❤</div>
+</div>
+    <div id="pu-box">&#9889; <span id="pu-active">none</span></div>
+<div id="power-bars"></div>
+  </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<canvas id="miniMap"></canvas>
+<div id="toast"></div>
+<div id="flash"></div>
+
+<!-- START -->
+<div id="start-screen" class="screen active">
+  <div class="box">
+    <h1>&#127807; ECHO WALKER</h1>
+    <h2>A game of sound and shadow</h2>
+    <p>The forest is pitch black. <strong>Click</strong> to send out a sound wave — it reveals the world briefly, but <em>wakes what lurks within</em>.<br><br>Collect all relics. Reach the exit. Don't get caught.</p>
+    <div class="cg">
+      <span class="k">WASD / Arrow Keys</span><span class="v">Move your character</span>
+      <span class="k">Click anywhere</span><span class="v">Emit a sound wave (reveals area)</span>
+      <span class="k">Gold circles</span><span class="v">Relics — collect all to unlock exit</span>
+      <span class="k">Blue / Yellow dots</span><span class="v">Power-ups: Silent Step / Lantern</span>
+    </div>
+    <button class="btn" id="start-btn">BEGIN</button>
+  </div>
+</div>
+
+<!-- LEVEL COMPLETE -->
+<div id="lvl-screen" class="screen">
+  <div class="box">
+    <h1>&#10024; ESCAPED!</h1>
+    <h2 id="lvl-msg">Level 1 complete</h2>
+    <p id="lvl-stats"></p>
+    <button class="btn" id="next-btn">NEXT LEVEL</button>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="go-screen" class="screen">
+  <div class="box red">
+    <h1 id="go-title">CAUGHT</h1>
+    <h2>The forest claimed you.</h2>
+    <p id="go-msg">Something found you in the dark.</p>
+    <button class="btn" id="retry-btn">TRY AGAIN</button>
+  </div>
+</div>
+
+<!-- WIN -->
+<div id="win-screen" class="screen">
+  <div class="box gold">
+    <h1>&#127775; YOU ESCAPED!</h1>
+    <h2>The forest finally released you.</h2>
+    <p>You survived all 3 levels of DARK FOREST.<br>The ancient relics are safe at last.</p>
+    <button class="btn" id="again-btn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  initAudio();   // 🔊 unlock audio
+  startGame();
+});
+// ── DOM ──────────────────────────────────────────────────
+const canvas   = document.getElementById('gameCanvas');
+const ctx      = canvas.getContext('2d');
+const miniMap = document.getElementById('miniMap');
+const mctx = miniMap.getContext('2d');
+const livesEl = document.getElementById('lives-value');
+
+function resizeMiniMap(){
+  miniMap.width = 160;
+  miniMap.height = 120;
+}
+resizeMiniMap();
+const lvlNumEl = document.getElementById('level-num');
+const relicEl  = document.getElementById('relic-value');
+const timerEl  = document.getElementById('timer-value');
+const msnEl    = document.getElementById('mission-text');
+const puEl     = document.getElementById('pu-active');
+const powerBarsEl = document.getElementById('power-bars');
+const toastEl  = document.getElementById('toast');
+const flashEl  = document.getElementById('flash');
+
+const SS = document.getElementById('start-screen');
+const LS = document.getElementById('lvl-screen');
+const GS = document.getElementById('go-screen');
+const WS = document.getElementById('win-screen');
+
+document.getElementById('next-btn').addEventListener('click', nextLevel);
+document.getElementById('retry-btn').addEventListener('click', restartGame);
+document.getElementById('again-btn').addEventListener('click', startGame);
+
+// ── OFFSCREEN CANVAS for darkness layer ──────────────────
+const darkCanvas = document.createElement('canvas');
+const dctx       = darkCanvas.getContext('2d');
+
+// ── CONSTANTS ────────────────────────────────────────────
+const TILE     = 40;
+const WS_SPD   = 2.8;   // wave expand speed
+const WS_RAD   = 120;   // base wave max radius
+const P_SPD    = 3;     // player speed
+const E_SPD    = 1.5;   // enemy normal speed
+const E_FAST   = 2.4;   // enemy fast speed (level 3)
+const COL_R    = 24;    // collection radius
+const EXIT_R   = 30;    // exit trigger radius
+
+// ── LEVEL CONFIGS ────────────────────────────────────────
+const LEVELS = [
+  { n:1, cols:22, rows:16, enemies:1, relics:3, timer:90,  fast:false, msn:'Collect 3 relics and reach the exit',          cmp:'You slipped past the first shadow.' },
+  { n:2, cols:30, rows:22, enemies:2, relics:5, timer:120, fast:false, msn:'Collect 5 relics before the exit opens',        cmp:'The forest retreats... for now.' },
+  { n:3, cols:40, rows:28, enemies:3, relics:7, timer:150, fast:true,  msn:'Find all 7 relics before the forest closes in', cmp:'' }
+];
+
+// ── STATE ────────────────────────────────────────────────
+let gs = 'idle';
+let li = 0, cfg, mapW, mapH;
+let player, playerSpawn, enemies, relics, pups, exitObj, waves, obstacles, particles;
+let collected, total, tLeft, tMax, tId, aId;
+let camX = 0, camY = 0;
+let silentOn = false, silentT = 0;
+let lanternOn = false, lanternT = 0;
+let shieldOn = false;
+let shieldT = 0;
+let hazardCooldown = 0;
+let damageCooldown = 0;
+let lives = 3;
+let echoSound = null;
+const keys = {};
+
+// ── CANVAS RESIZE ────────────────────────────────────────
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight - 60;
+  darkCanvas.width  = canvas.width;
+  darkCanvas.height = canvas.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── INPUT ────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))
+    e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+canvas.addEventListener('click', (e) => {
+  if (gs !== 'playing') return;
+
+  // 🔊 PLAY ECHO SOUND HERE
+  if (echoSound) {
+    echoSound.currentTime = 0;
+    echoSound.play().catch(() => {});
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left) + camX;
+  const wy = (e.clientY - rect.top) + camY;
+
+  addWave(wx, wy, true);
+});
+
+// ── HELPERS ──────────────────────────────────────────────
+const dist  = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const rnd   = (lo, hi)  => lo + Math.random() * (hi - lo);
+function initAudio() {
+  if (!echoSound) {
+    echoSound = new Audio('echo.mp3');
+    echoSound.volume = 0.45;
+  }
+}
+
+function isPlayerInHazard() {
+  if (!obstacles) return false;
+  return obstacles.some(o =>
+    player.x > o.x &&
+    player.x < o.x + o.w &&
+    player.y > o.y &&
+    player.y < o.y + o.h
+  );
+}
+
+function randPos(x0, x1, y0, y1, avoid) {
+  let p, tries = 0;
+
+  do {
+    p = { x: rnd(x0, x1), y: rnd(y0, y1) };
+    tries++;
+
+    const tooClose = avoid.some(a => {
+      // rectangle obstacle
+      if (a.w && a.h) {
+  const pad = 90; // stronger safety buffer
+  return !(
+    p.x + pad < a.x ||
+    p.x - pad > a.x + a.w ||
+    p.y + pad < a.y ||
+    p.y - pad > a.y + a.h
+  );
+}
+      // circle objects
+      return dist(p, a) < 80;
+    });
+
+    if (!tooClose) break;
+
+  } while (tries < 120);
+
+  return p;
+}
+function drawMiniMap() {
+  const mw = miniMap.width;
+  const mh = miniMap.height;
+
+  // Clear
+  mctx.clearRect(0, 0, mw, mh);
+
+  // Scale world → minimap
+  const scaleX = mw / mapW;
+  const scaleY = mh / mapH;
+
+  // Background
+  mctx.fillStyle = 'rgba(20,40,25,0.9)';
+  mctx.fillRect(0, 0, mw, mh);
+
+  // 🔓 Exit marker (always visible for navigation)
+  mctx.fillStyle = exitObj.open ? '#44ffaa' : '#884444';
+  mctx.beginPath();
+  mctx.arc(exitObj.x * scaleX, exitObj.y * scaleY, 4, 0, Math.PI * 2);
+  mctx.fill();
+
+  // 🧍 Player marker (most important)
+  mctx.fillStyle = '#ffffff';
+  mctx.beginPath();
+  mctx.arc(player.x * scaleX, player.y * scaleY, 3.5, 0, Math.PI * 2);
+  mctx.fill();
+
+  // 📦 Camera viewport box (optional but professional — keep it)
+  const viewW = canvas.width * scaleX;
+  const viewH = canvas.height * scaleY;
+
+  mctx.strokeStyle = 'rgba(200,255,220,0.6)';
+  mctx.lineWidth = 1;
+  mctx.strokeRect(camX * scaleX, camY * scaleY, viewW, viewH);
+}
+function updatePowerBars() {
+powerBarsEl.innerHTML = '';
+  // Silent
+  if (silentOn && silentT > 0) {
+    createPowerBar('silent', silentT / 400);
+  }
+
+  // Lantern
+  if (lanternOn && lanternT > 0) {
+    createPowerBar('lantern', lanternT / 480);
+  }
+
+  // Shield (if you added it)
+  if (shieldOn && shieldT > 0) {
+    createPowerBar('shield', shieldT / 600);
+  }
+}
+
+function createPowerBar(type, ratio) {
+  const bar = document.createElement('div');
+  bar.className = 'power-bar ' + type;
+
+  const fill = document.createElement('div');
+  fill.className = 'power-fill';
+  fill.style.width = (ratio * 100) + '%';
+
+  bar.appendChild(fill);
+  powerBarsEl.appendChild(bar);
+}
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 2400);
+}
+
+function hideAll() { [SS, LS, GS, WS].forEach(s => s.classList.remove('active')); }
+function showScreen(s) { hideAll(); s.classList.add('active'); }
+// ── HUD HELPERS (GLOBAL) ─────────────────────────────────
+function updateRelicHUD() {
+  relicEl.textContent = collected + ' / ' + total;
+}
+
+function updateLivesHUD() {
+  livesEl.textContent = '❤'.repeat(lives);
+}
+
+function updateTimerHUD() {
+  timerEl.textContent = tLeft;
+  timerEl.className = '';
+  if (tLeft <= 10) timerEl.classList.add('pulse');
+  else if (tLeft <= 20) timerEl.classList.add('low');
+}
+
+function tickTimer() {
+  if (gs !== 'playing') return;
+  tLeft--;
+  updateTimerHUD();
+  if (tLeft <= 0) die("Time ran out in the whispering dark.", "TIME'S UP");
+}
+
+// ── WAVES (GLOBAL) ───────────────────────────────────────
+function addWave(wx, wy, fromClick) {
+  waves.push({
+    x: wx,
+    y: wy,
+    r: 0,
+    maxR: WS_RAD + (lanternOn ? 100 : 0),
+    fromClick
+  });
+}
+// ── GAME FLOW ────────────────────────────────────────────
+function startGame()   { li = 0; hideAll(); loadLevel(0); }
+function restartGame() { hideAll(); loadLevel(li); }
+function nextLevel()   { li++; if (li >= LEVELS.length) { showScreen(WS); return; } hideAll(); loadLevel(li); }
+
+function loadLevel(idx) {
+  clearInterval(tId);
+  cancelAnimationFrame(aId);
+
+  cfg  = LEVELS[idx];
+  mapW = cfg.cols * TILE;
+  mapH = cfg.rows * TILE;
+
+  lvlNumEl.textContent = cfg.n;
+  msnEl.textContent    = cfg.msn;
+  msnEl.classList.remove('done');
+
+  // ── Player spawn ──
+  player = { x: TILE * 2.5, y: TILE * 2.5, r: 11 };
+  playerSpawn = { x: player.x, y: player.y };
+
+  // ── Exit ──
+  exitObj = {
+    x: mapW - TILE * 2.5,
+    y: mapH - TILE * 2.5,
+    r: 20,
+    open: false
+  };
+
+  total     = cfg.relics;
+  collected = 0;
+  updateRelicHUD();
+  lives = 3;
+updateLivesHUD();
+
+  // ─────────────────────────────────────────
+  // Spread objects safely
+  // ─────────────────────────────────────────
+  const used = [player, exitObj];
+
+  // ── Hazard zones ──
+  obstacles = [];
+  const numHazards = 6 + cfg.n * 2;
+
+  for (let i = 0; i < numHazards; i++) {
+    const w = rnd(80, 160);
+    const h = rnd(80, 140);
+
+    const p = randPos(
+      TILE,
+      mapW - w - TILE,
+      TILE,
+      mapH - h - TILE,
+      [...used, ...obstacles]
+    );
+
+    const hazard = {
+  x: Math.floor(p.x / TILE) * TILE,
+  y: Math.floor(p.y / TILE) * TILE,
+  w: Math.floor(w / TILE) * TILE,
+  h: Math.floor(h / TILE) * TILE
+};
+    obstacles.push(hazard);
+    used.push(hazard);
+  }
+
+  // ── Relics ──
+  relics = [];
+  for (let i = 0; i < cfg.relics; i++) {
+    const p = randPos(
+      TILE,
+      mapW - TILE,
+      TILE,
+      mapH - TILE,
+      [...used, ...relics]
+    );
+    p.r = 9;
+    relics.push(p);
+    used.push(p);
+  }
+
+  // ── Enemies ──
+  const spd = cfg.fast ? E_FAST : E_SPD;
+  enemies = [];
+
+  for (let i = 0; i < cfg.enemies; i++) {
+    const p = randPos(
+      TILE * 3,
+      mapW - TILE * 3,
+      TILE * 3,
+      mapH - TILE * 3,
+      [...used, ...enemies]
+    );
+
+    p.r = 12;
+    p.speed = spd;
+    p.vx = (Math.random() - 0.5) * spd * 2;
+    p.vy = (Math.random() - 0.5) * spd * 2;
+    p.state = 'idle'; // idle | investigate | chase
+    p.targetX = p.x;
+    p.targetY = p.y;
+
+    enemies.push(p);
+    used.push(p);
+  }
+
+  // ── Powerups ──
+  const puTypes = ['silent', 'lantern', 'shield', 'silent', 'lantern'];
+  pups = [];
+
+  for (let i = 0; i < Math.min(cfg.enemies + 1, 4); i++) {
+    const p = randPos(
+      TILE,
+      mapW - TILE,
+      TILE,
+      mapH - TILE,
+      [...used, ...pups]
+    );
+
+    p.r = 9;
+    p.type = puTypes[i % puTypes.length];
+    pups.push(p);
+    used.push(p);
+  }
+
+  // ─────────────────────────────────────────
+  // Reset runtime state
+  // ─────────────────────────────────────────
+  waves = [];
+  silentOn = false;
+  silentT = 0;
+  lanternOn = false;
+  lanternT = 0;
+  puEl.textContent = 'none';
+  powerBarsEl.innerHTML = '';
+
+  camX = 0;
+  camY = 0;
+
+  tLeft = cfg.timer;
+  tMax  = cfg.timer;
+  updateTimerHUD();
+  tId = setInterval(tickTimer, 1000);
+// ── Ambient particles ──
+particles = [];
+for (let i = 0; i < 60; i++) {
+  particles.push({
+    x: Math.random() * mapW,
+    y: Math.random() * mapH,
+    r: Math.random() * 1.8 + 0.4,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: (Math.random() - 0.5) * 0.2,
+    phase: Math.random() * Math.PI * 2
+  });
+}
+  gs = 'playing';
+  loop();
+}
+// ── MAIN LOOP ────────────────────────────────────────────
+function loop() {
+  if (gs !== 'playing') return;
+  update();
+  render();
+  aId = requestAnimationFrame(loop);
+}
+
+// ── UPDATE ───────────────────────────────────────────────
+function update() {
+  // power countdowns
+  if (silentOn && --silentT <= 0) {
+    silentOn = false;
+    puEl.textContent = lanternOn ? 'Lantern' : 'none';
+  }
+
+  if (lanternOn && --lanternT <= 0) {
+    lanternOn = false;
+    puEl.textContent = silentOn ? 'Silent' : 'none';
+  }
+
+  if (shieldOn && --shieldT <= 0) {
+    shieldOn = false;
+    puEl.textContent = 'none';
+  }
+
+  if (damageCooldown > 0) damageCooldown--;
+
+  updateParticles();
+  movePlayer();
+
+  // ✅ single hazard check (clean)
+  if (!shieldOn && isPlayerInHazard() && damageCooldown === 0) {
+    triggerHazardPenalty();
+  }
+
+  updateWaves();
+  updateEnemies();
+  checkCollect();
+  updateCamera();
+  updatePowerBars();
+}
+
+function movePlayer() {
+  let dx = 0, dy = 0;
+  if (keys['KeyA'] || keys['ArrowLeft'])  dx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+  if (keys['KeyW'] || keys['ArrowUp'])    dy -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  dy += 1;
+  if (dx && dy) { dx *= 0.707; dy *= 0.707; }
+
+  let speed = P_SPD;
+
+if (!shieldOn && isPlayerInHazard()) {
+  speed *= 0.45;
+}
+
+player.x = clamp(player.x + dx * speed, player.r, mapW - player.r);
+player.y = clamp(player.y + dy * speed, player.r, mapH - player.r);
+
+  // Footstep wave when moving (not silent)
+  if ((dx || dy) && !silentOn && Math.random() < 0.05) {
+    addWave(player.x, player.y, false);
+  }
+}
+
+function updateWaves() {
+  for (let i = waves.length - 1; i >= 0; i--) {
+    const w = waves[i];
+    w.r += WS_SPD + (w.r * 0.025);
+    // Alert enemies touched by expanding wave front
+    enemies.forEach(e => {
+      if (Math.abs(dist(w, e) - w.r) < e.r + 8) {
+  if (e.state === 'idle') {
+    e.state = 'investigate';
+    e.targetX = w.x;
+    e.targetY = w.y;
+  }
+}
+    });
+    if (w.r >= w.maxR) waves.splice(i, 1);
+  }
+}
+
+function updateEnemies() {
+  enemies.forEach(e => {
+
+    const dx = player.x - e.x;
+    const dy = player.y - e.y;
+    const distToPlayer = Math.hypot(dx, dy);
+
+    // 🔴 CHASE STATE
+    if (e.state === 'chase') {
+      const d = distToPlayer || 1;
+      e.vx = (dx / d) * e.speed;
+      e.vy = (dy / d) * e.speed;
+
+      if (d > 480) e.state = 'idle';
+    }
+
+    // 🟡 INVESTIGATE STATE
+    else if (e.state === 'investigate') {
+      const dx2 = e.targetX - e.x;
+      const dy2 = e.targetY - e.y;
+      const d2 = Math.hypot(dx2, dy2) || 1;
+
+      if (d2 < 10) {
+        e.state = 'idle';
+      } else {
+        e.vx = (dx2 / d2) * e.speed * 0.9;
+        e.vy = (dy2 / d2) * e.speed * 0.9;
+      }
+
+      // escalate to chase
+      if (distToPlayer < 140) {
+        e.state = 'chase';
+      }
+    }
+
+    // 🟢 IDLE
+    else {
+      if (Math.random() < 0.02) {
+        const a = Math.random() * Math.PI * 2;
+        e.vx = Math.cos(a) * e.speed * 0.55;
+        e.vy = Math.sin(a) * e.speed * 0.55;
+      }
+
+      if (distToPlayer < 120) {
+        e.state = 'chase';
+      }
+    }
+
+    // ── movement ──
+    e.x = clamp(e.x + e.vx, e.r, mapW - e.r);
+    e.y = clamp(e.y + e.vy, e.r, mapH - e.r);
+
+    if (e.x <= e.r || e.x >= mapW - e.r) e.vx *= -1;
+    if (e.y <= e.r || e.y >= mapH - e.r) e.vy *= -1;
+
+    // ⚠️ Near-miss tension
+    const near = dist(e, player);
+    if (near < 90 && near > e.r + player.r) {
+      flashEl.style.opacity = '0.12';
+      setTimeout(() => flashEl.style.opacity = '0', 80);
+    }
+    
+    // 💀 Catch player
+    if (near < e.r + player.r) {
+      damagePlayer('A creature caught you in the dark. Be careful next time!');
+    }
+  });
+}
+function checkCollect() {
+  // Relics
+  for (let i = relics.length - 1; i >= 0; i--) {
+    if (dist(player, relics[i]) < COL_R) {
+      relics.splice(i, 1);
+      collected++;
+      updateRelicHUD();
+      addWave(player.x, player.y, false);
+      if (collected >= total) {
+        exitObj.open = true;
+        msnEl.textContent = 'All relics found — reach the glowing exit!';
+        msnEl.classList.add('done');
+        showToast('EXIT UNLOCKED — find the glowing portal!');
+      }
+    }
+  }
+  // Power-ups
+  for (let i = pups.length - 1; i >= 0; i--) {
+    const p = pups[i];
+    if (dist(player, p) < COL_R) {
+      pups.splice(i, 1);
+      if (p.type === 'silent') {
+  silentOn = true;
+  silentT = 400;
+  puEl.textContent = 'Silent Step';
+  showToast('SILENT STEP — your footsteps make no sound');
+}
+
+else if (p.type === 'lantern') {
+  lanternOn = true;
+  lanternT = 480;
+  puEl.textContent = 'Lantern';
+  showToast('LANTERN — your waves reach further');
+}
+
+else if (p.type === 'shield') {
+  shieldOn = true;
+  shieldT = 600; // ⭐ ~10 seconds at 60fps
+  puEl.textContent = 'Shield';
+  showToast('SHIELD — you can pass through hazards');
+}
+    }
+  }
+  // Exit
+  if (exitObj.open && dist(player, exitObj) < EXIT_R) levelDone();
+}
+
+function updateCamera() {
+  const cw = canvas.width, ch = canvas.height;
+  const tx = player.x - cw / 2;
+  const ty = player.y - ch / 2;
+  camX += (tx - camX) * 0.1;
+  camY += (ty - camY) * 0.1;
+  camX = clamp(camX, 0, Math.max(0, mapW - cw));
+  camY = clamp(camY, 0, Math.max(0, mapH - ch));
+}
+
+// ── WIN / LOSE ────────────────────────────────────────────
+function damagePlayer(msg) {
+  if (gs !== 'playing') return;
+
+  // ⭐ prevent rapid multi-hit
+  if (damageCooldown > 0) return;
+
+  damageCooldown = 60; // ~1 second invulnerability
+
+  lives--;
+  updateLivesHUD();
+
+  // heart hit animation
+  livesEl.classList.add('hit');
+  setTimeout(() => livesEl.classList.remove('hit'), 180);
+
+  flashEl.classList.add('show');
+  setTimeout(() => flashEl.classList.remove('show'), 200);
+
+  if (lives <= 0) {
+    die(msg, 'CAUGHT');
+    return;
+  }
+
+  showToast('You were hit! Be careful…');
+
+  // respawn player safely
+  player.x = playerSpawn.x;
+  player.y = playerSpawn.y;
+}
+
+function die(msg, title) {
+  if (gs !== 'playing') return;
+  gs = 'dead';
+  clearInterval(tId); cancelAnimationFrame(aId);
+  flashEl.classList.add('show');
+  setTimeout(() => flashEl.classList.remove('show'), 250);
+  document.getElementById('go-title').textContent = title || 'CAUGHT';
+  document.getElementById('go-msg').textContent   = msg;
+  setTimeout(() => showScreen(GS), 600);
+}
+
+function levelDone() {
+  if (gs !== 'playing') return;
+  gs = 'done';
+  clearInterval(tId); cancelAnimationFrame(aId);
+  if (li >= LEVELS.length - 1) {
+    setTimeout(() => showScreen(WS), 700);
+  } else {
+    document.getElementById('lvl-msg').textContent   = cfg.cmp;
+    document.getElementById('lvl-stats').textContent = collected + '/' + total + ' relics  |  ' + tLeft + 's remaining';
+    setTimeout(() => showScreen(LS), 600);
+  }
+}
+function triggerHazardPenalty() {
+  if (gs !== 'playing') return;
+
+  // alert enemies
+  enemies.forEach(e => {
+    e.state = 'chase';
+  });
+
+  showToast('THE FOREST REJECTS YOU');
+
+  damagePlayer('The forest punishes your mistake.');
+}
+
+// ── RENDER ───────────────────────────────────────────────
+function render() {
+  const cw = canvas.width, ch = canvas.height;
+
+  // 1. Clear main canvas
+  ctx.clearRect(0, 0, cw, ch);
+
+  // 2. Draw world (translated by camera)
+  ctx.save();
+  ctx.translate(-camX, -camY);
+  drawBackground();
+  drawParticles();
+  drawExit();
+  drawRelics();
+  drawPups();
+  drawWaveRings();
+  drawEnemies();
+  drawPlayer();
+  ctx.restore();
+  drawMiniMap();
+
+  // 3. Draw darkness overlay (offscreen canvas approach — fixes destination-out bug)
+  drawDarkness(cw, ch);
+
+  // 4. Composite the darkness on top of the world
+  ctx.drawImage(darkCanvas, 0, 0);
+}
+
+// ── WORLD DRAWING ────────────────────────────────────────
+function drawBackground() {
+  const cols = Math.ceil(mapW / TILE);
+  const rows = Math.ceil(mapH / TILE);
+
+  // base tiles
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = 8 + ((r * 7 + c * 5) % 6);
+      ctx.fillStyle = 'rgb(' + v + ',' + (v + 5) + ',' + v + ')';
+      ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+    }
+  }
+
+  // ✅ CLEAN rectangular hazards ONLY
+  if (obstacles) {
+    obstacles.forEach(o => {
+      ctx.save();
+
+      const g = ctx.createLinearGradient(o.x, o.y, o.x, o.y + o.h);
+      g.addColorStop(0, 'rgba(120,20,20,0.9)');
+      g.addColorStop(1, 'rgba(60,0,0,0.95)');
+      ctx.fillStyle = g;
+
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+
+      ctx.strokeStyle = 'rgba(255,80,80,0.35)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(o.x, o.y, o.w, o.h);
+
+      ctx.restore();
+    });
+  }
+
+  // grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.015)';
+  ctx.lineWidth   = 0.5;
+
+  for (let c = 0; c <= cols; c++) {
+    ctx.beginPath();
+    ctx.moveTo(c * TILE, 0);
+    ctx.lineTo(c * TILE, mapH);
+    ctx.stroke();
+  }
+
+  for (let r = 0; r <= rows; r++) {
+    ctx.beginPath();
+    ctx.moveTo(0, r * TILE);
+    ctx.lineTo(mapW, r * TILE);
+    ctx.stroke();
+  }
+}
+
+function drawExit() {
+  const { x, y, r, open } = exitObj;
+  ctx.save();
+
+  if (open) {
+    // Bright pulsing green portal glow
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.004);
+    const glow  = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+    glow.addColorStop(0, 'rgba(50,255,140,' + (pulse * 0.6) + ')');
+    glow.addColorStop(1, 'rgba(50,255,140,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, y, r * 5, 0, Math.PI * 2); ctx.fill();
+    // Ring
+    ctx.strokeStyle = '#44ffaa';
+    ctx.lineWidth   = 4;
+    ctx.shadowColor = '#00ffaa';
+    ctx.shadowBlur  = 22;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    // Fill
+    ctx.fillStyle = '#1a5c38';
+    ctx.beginPath(); ctx.arc(x, y, r - 3, 0, Math.PI * 2); ctx.fill();
+    // EXIT text
+    ctx.shadowBlur   = 10;
+    ctx.fillStyle    = '#aaffdd';
+    ctx.font         = 'bold 11px Georgia, serif';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT', x, y);
+  } else {
+    // Locked — dim red-brown
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle   = '#2a1010';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#663333';
+    ctx.lineWidth   = 2.5;
+    ctx.stroke();
+    ctx.fillStyle    = '#884444';
+    ctx.font         = 'bold 11px Georgia, serif';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(collected + '/' + total, x, y);
+  }
+  ctx.restore();
+}
+
+function drawRelics() {
+  const t = Date.now() * 0.003;
+  relics.forEach(rel => {
+    const pulse = 0.7 + 0.3 * Math.sin(t + rel.x * 0.012);
+    ctx.save();
+
+    // Large golden glow halo
+    const g = ctx.createRadialGradient(rel.x, rel.y, 0, rel.x, rel.y, 36);
+    g.addColorStop(0, 'rgba(255, 200, 50, ' + (pulse * 0.7) + ')');
+    g.addColorStop(1, 'rgba(255, 180, 20, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(rel.x, rel.y, 36, 0, Math.PI * 2); ctx.fill();
+
+    // Diamond shape
+    const s = 11;
+    ctx.shadowColor = '#ffdd44';
+    ctx.shadowBlur  = 16;
+    ctx.fillStyle   = '#f5c030';
+    ctx.beginPath();
+    ctx.moveTo(rel.x,     rel.y - s);
+    ctx.lineTo(rel.x + s, rel.y);
+    ctx.lineTo(rel.x,     rel.y + s);
+    ctx.lineTo(rel.x - s, rel.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#fff8aa';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // Inner shine
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = 'rgba(255,255,220,0.7)';
+    ctx.beginPath();
+    ctx.moveTo(rel.x,         rel.y - s * 0.45);
+    ctx.lineTo(rel.x + s * 0.45, rel.y);
+    ctx.lineTo(rel.x,         rel.y - s * 0.05);
+    ctx.lineTo(rel.x - s * 0.45, rel.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawPups() {
+  const t = Date.now() * 0.004;
+  pups.forEach(p => {
+    const isSilent = p.type === 'silent';
+    const pulse    = 0.6 + 0.4 * Math.sin(t + p.y * 0.015);
+    ctx.save();
+
+    // Glow
+    const col = isSilent ? '80,120,255' : '255,200,40';
+    const g   = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 26);
+    g.addColorStop(0, 'rgba(' + col + ',' + (pulse * 0.65) + ')');
+    g.addColorStop(1, 'rgba(' + col + ',0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 26, 0, Math.PI * 2); ctx.fill();
+
+    // Outer ring
+    ctx.strokeStyle = isSilent ? '#8899ff' : '#ffdd44';
+    ctx.lineWidth   = 2.5;
+    ctx.shadowColor = isSilent ? '#4466ff' : '#ffbb00';
+    ctx.shadowBlur  = 12;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, Math.PI * 2); ctx.stroke();
+
+    // Body
+    ctx.fillStyle = isSilent ? '#5566ee' : '#ffcc22';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fill();
+
+    // Icon letter
+    ctx.shadowBlur   = 0;
+    ctx.fillStyle    = '#fff';
+    ctx.font         = 'bold 11px Georgia, serif';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(isSilent ? 'S' : 'L', p.x, p.y);
+    ctx.restore();
+  });
+}
+
+function drawWaveRings() {
+  waves.forEach(w => {
+    const life = 1 - w.r / w.maxR;
+    if (life <= 0) return;
+    ctx.save();
+    // Bright thick ring
+    ctx.globalAlpha = life * 0.9;
+    ctx.strokeStyle = '#aaffcc';
+    ctx.lineWidth   = 3.5;
+    ctx.shadowColor = '#44ffaa';
+    ctx.shadowBlur  = 12;
+    ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.stroke();
+    // Bright burst at click origin
+    if (w.fromClick && life > 0.65) {
+      ctx.globalAlpha = (life - 0.65) * 2.8;
+      const ig = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, 48);
+      ig.addColorStop(0, 'rgba(200, 255, 180, 1)');
+      ig.addColorStop(1, 'rgba(200, 255, 180, 0)');
+      ctx.fillStyle = ig;
+      ctx.beginPath(); ctx.arc(w.x, w.y, 48, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+function drawEnemies() {
+  enemies.forEach(e => {
+    const lit = lanternOn || waves.some(w => dist(w, e) < w.r + 60 && (1 - w.r / w.maxR) > 0);
+    if (!lit) return;
+
+    ctx.save();
+    const chasing = e.state === 'chase';
+
+    // Pulsing danger aura
+    const auraR = e.r * 4;
+    const aura  = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, auraR);
+    aura.addColorStop(0, chasing ? 'rgba(255,30,30,0.55)' : 'rgba(180,20,20,0.3)');
+    aura.addColorStop(1, 'rgba(180,20,20,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(e.x, e.y, auraR, 0, Math.PI * 2); ctx.fill();
+
+    // Spiky outer ring (triangle points)
+    ctx.strokeStyle = chasing ? '#ff2222' : '#882222';
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = chasing ? '#ff0000' : '#cc2222';
+    ctx.shadowBlur  = chasing ? 20 : 10;
+    const spikes = 6;
+    ctx.beginPath();
+    for (let i = 0; i < spikes; i++) {
+      const outerA = (i / spikes) * Math.PI * 2 - Math.PI / 2;
+      const innerA = outerA + Math.PI / spikes;
+      const or = e.r + 6, ir = e.r - 2;
+      if (i === 0) ctx.moveTo(e.x + Math.cos(outerA) * or, e.y + Math.sin(outerA) * or);
+      else         ctx.lineTo(e.x + Math.cos(outerA) * or, e.y + Math.sin(outerA) * or);
+      ctx.lineTo(e.x + Math.cos(innerA) * ir, e.y + Math.sin(innerA) * ir);
+    }
+    ctx.closePath();
+    ctx.fillStyle = chasing ? '#cc1111' : '#661111';
+    ctx.fill();
+    ctx.stroke();
+
+    // Glowing eyes
+    ctx.shadowColor = '#ff8888';
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = chasing ? '#ffff00' : '#ff4444';
+    ctx.beginPath(); ctx.arc(e.x - 4, e.y - 2, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e.x + 4, e.y - 2, 3.5, 0, Math.PI * 2); ctx.fill();
+    // Pupil
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = '#000';
+    ctx.beginPath(); ctx.arc(e.x - 4, e.y - 2, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e.x + 4, e.y - 2, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    // Big red "!" alert above when chasing
+    if (chasing) {
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = '#ff2222';
+      ctx.font        = 'bold 18px Georgia, serif';
+      ctx.textAlign   = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('!', e.x, e.y - e.r - 8);
+    }
+    ctx.restore();
+  });
+}
+
+function drawPlayer() {
+  const { x, y, r } = player;
+  ctx.save();
+  // Wide warm lantern glow around player
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 6);
+  glow.addColorStop(0,   'rgba(255, 200, 80, 0.5)');
+  glow.addColorStop(0.5, 'rgba(255, 160, 40, 0.2)');
+  glow.addColorStop(1,   'rgba(255, 160, 40, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x, y, r * 6, 0, Math.PI * 2); ctx.fill();
+
+  // Outer ring
+  ctx.strokeStyle = silentOn ? '#55ffaa' : '#ffdd88';
+  ctx.lineWidth   = 3;
+  ctx.shadowColor = silentOn ? '#44ffaa' : '#ffaa33';
+  ctx.shadowBlur  = 18;
+  ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke();
+
+  // Body — cloak shape (filled circle with distinct colour)
+  ctx.fillStyle   = silentOn ? '#33cc88' : '#f0a830';
+  ctx.shadowColor = silentOn ? '#00ff88' : '#ffcc44';
+  ctx.shadowBlur  = 14;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // White highlight dot top-left
+  ctx.shadowBlur  = 0;
+  ctx.fillStyle   = 'rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.28, 0, Math.PI * 2); ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#1a0a00';
+  ctx.beginPath(); ctx.arc(x - 3.5, y + 1, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 3.5, y + 1, 2.5, 0, Math.PI * 2); ctx.fill();
+  // 🛡️ Shield aura
+if (shieldOn) {
+  ctx.strokeStyle = '#66ccff';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = '#66ccff';
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.arc(x, y, r + 10, 0, Math.PI * 2);
+  ctx.stroke();
+}
+  ctx.restore();
+}
+
+
+// ── DARKNESS (offscreen canvas) ──────────────────────────
+
+function drawDarkness(cw, ch) {
+  // Sync size if window was resized
+  if (darkCanvas.width !== cw || darkCanvas.height !== ch) {
+    darkCanvas.width  = cw;
+    darkCanvas.height = ch;
+  }
+
+  // Fill offscreen with solid black
+  dctx.clearRect(0, 0, cw, ch);
+ dctx.fillStyle = 'rgba(0,0,0,1)';
+  dctx.fillRect(0, 0, cw, ch);
+
+  // Punch light holes using destination-out on the OFFSCREEN canvas
+  dctx.globalCompositeOperation = 'destination-out';
+
+  // 1. Player ambient light — fully bright core, soft falloff
+  const px = player.x - camX;
+  const py = player.y - camY;
+  const pr = lanternOn ? 140 : 60;
+  const pg = dctx.createRadialGradient(px, py, 0, px, py, pr);
+  pg.addColorStop(0,    'rgba(0, 0, 0, 1)');   // fully transparent (erases darkness)
+  pg.addColorStop(0.45, 'rgba(0, 0, 0, 0.9)');   // stay bright near player
+  pg.addColorStop(0.75, 'rgba(0, 0, 0, 0.4)'); // soft fade
+  pg.addColorStop(1,    'rgba(0, 0, 0, 0)');
+  dctx.fillStyle = pg;
+  dctx.beginPath(); dctx.arc(px, py, pr, 0, Math.PI * 2); dctx.fill();
+
+  // 2. Each wave illuminates a wide disc — brighter and wider than before
+  waves.forEach(w => {
+    const life = 1 - w.r / w.maxR;
+    if (life <= 0) return;
+    const sx = w.x - camX;
+    const sy = w.y - camY;
+    const illuminateR = w.r + 40;
+    const wg = dctx.createRadialGradient(sx, sy, 0, sx, sy, illuminateR);
+    wg.addColorStop(0,    'rgba(0, 0, 0, 1)');               // bright centre
+    wg.addColorStop(0.55, 'rgba(0, 0, 0, ' + (life * 0.98) + ')');  // stays bright
+    wg.addColorStop(0.8,  'rgba(0, 0, 0, ' + (life * 0.55) + ')');  // fade out
+    wg.addColorStop(1,    'rgba(0, 0, 0, 0)');
+    dctx.fillStyle = wg;
+    dctx.beginPath(); dctx.arc(sx, sy, illuminateR, 0, Math.PI * 2); dctx.fill();
+  });
+
+  // Reset composite for vignette pass
+  dctx.globalCompositeOperation = 'source-over';
+
+  // 3. Soft edge vignette (darken screen edges a bit more)
+  // ── breathing vignette ──
+const breathe = 0.92 + Math.sin(Date.now() * 0.0015) * 0.04;
+
+const vg = dctx.createRadialGradient(
+  cw / 2,
+  ch / 2,
+  ch * 0.25 * breathe,
+  cw / 2,
+  ch / 2,
+  ch * 0.9 * breathe
+);
+
+vg.addColorStop(0, 'rgba(0,0,0,0)');
+vg.addColorStop(1, 'rgba(0,0,0,0.65)');
+
+dctx.fillStyle = vg;
+dctx.fillRect(0, 0, cw, ch);
+}
+function updateParticles() {
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.phase += 0.05;
+
+    // wrap around world
+    if (p.x < 0) p.x = mapW;
+    if (p.x > mapW) p.x = 0;
+    if (p.y < 0) p.y = mapH;
+    if (p.y > mapH) p.y = 0;
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    const sx = p.x;
+    const sy = p.y;
+
+    ctx.save();
+    ctx.globalAlpha = 0.4 + Math.sin(p.phase) * 0.3;
+    ctx.fillStyle = '#88ffcc';
+    ctx.beginPath();
+    ctx.arc(sx, sy, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ── BOOT ─────────────────────────────────────────────────
+showScreen(SS);
+</script>
+</body>
+</html>
